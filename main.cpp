@@ -28,9 +28,7 @@ int main() {
 
   // флаг доступности (не используется, можно удалить/раскомментировать при необходимости)
   // bool isCan = true;
-  uint32_t previousMillis = 0;     // отметка времени последней телеметрии
-  const uint32_t interval = 200;   // период отправки телеметрии, мс
-  const uint32_t crsfSendPeriodMs = 20; // ~50 Гц отправка каналов
+  const uint32_t crsfSendPeriodMs = 10; // ~100 Гц отправка каналов для реалтайма
   uint32_t lastSendMs = 0;
   // Инициализация джойстика (не критично, если недоступен)
   if (js_open("/dev/input/js0")) {
@@ -43,7 +41,7 @@ int main() {
   std::thread webServerThread([]() {
     // Ждем инициализации CRSF (уменьшено для реалтайма)
     rpi_delay_ms(500);
-    startTelemetryServer((CrsfSerial*)crsfGetActive(), 8080);
+    startTelemetryServer((CrsfSerial*)crsfGetActive(), 8081, 10);
   });
   webServerThread.detach();
 
@@ -85,17 +83,16 @@ int main() {
     if (axis2_ok) crsfSetChannel(3, axisToUs(ax2)); // Throttle
     if (axis3_ok) crsfSetChannel(4, axisToUs(ax3)); // Yaw
 
-    // Отправляем RC-каналы с частотой ~50 Гц
+    // Отправляем RC-каналы с частотой ~100 Гц для реалтайма
     if (currentMillis - lastSendMs >= crsfSendPeriodMs) {
       lastSendMs = currentMillis;
-      printf("ВЫЗОВ crsfSendChannels()\n"); // <--- ДОБАВЬТЕ ЭТО
       crsfSendChannels();
     }
 
 
 #endif
-    // Минимальная задержка для реалтайма
-    rpi_delay_ms(0); // Убираем задержку для максимальной скорости
+    // Реалтайм без задержек - максимальная скорость обработки
+    // rpi_delay_ms(0); // Полностью убираем задержку для реалтайма
   }
 
   return 0;

@@ -77,7 +77,6 @@ int SerialPort::read(uint8_t *buf, size_t len) {
 }
 
 int SerialPort::write(const uint8_t *buf, size_t len) {
-    printf("ЗАПИСЬ %zu БАЙТ В ПОРТ %s\n", len, _path.c_str()); // <-- ДОБАВЬТЕ ЭТУ СТРОКУ
     return ::write(_fd, buf, len);
 }
 

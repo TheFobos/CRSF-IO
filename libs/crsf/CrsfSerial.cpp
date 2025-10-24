@@ -290,7 +290,6 @@ void CrsfSerial::queuePacket(uint8_t addr, uint8_t type, const void* payload, ui
     //         Serial.print(0, BYTE);
     //     }
     // }
-    printf("ОТПРАВКА ПАКЕТА ТИПА %d\n", type);
     write(buf, len + 4);
     // log_info("CRSF: отправлен пакет типа " + std::to_string(type));
 }
@@ -365,15 +364,14 @@ void CrsfSerial::packetAttitude(const crsf_header_t* p)
         int16_t roll = be16toh(*(int16_t*)&p->data[2]);
         int16_t yaw = be16toh(*(int16_t*)&p->data[4]);
 
-        // Выводим сырые значения
-        log_info("RAW ATTITUDE: P=" + std::to_string(pitch) + 
-                 " R=" + std::to_string(roll) + 
-                 " Y=" + std::to_string(yaw));
+        // Убираем избыточные логи для реалтайма (замедляют отображение)
+        // log_info("RAW ATTITUDE: P=" + std::to_string(pitch) + 
+        //          " R=" + std::to_string(roll) + 
+        //          " Y=" + std::to_string(yaw));
 
-        // Выводим преобразованные значения
-        log_info("ATTITUDE: Pitch=" + std::to_string(pitch/100.0f) + 
-                "° Roll=" + std::to_string(roll/100.0f) + 
-                "° Yaw=" + std::to_string(yaw/100.0f) + "°");
+        // log_info("ATTITUDE: Pitch=" + std::to_string(pitch/100.0f) + 
+        //         "° Roll=" + std::to_string(roll/100.0f) + 
+        //         "° Yaw=" + std::to_string(yaw/100.0f) + "°");
         
         // Сохраняем данные положения
         _attitudePitch = pitch / 100.0; // Конвертируем в градусы

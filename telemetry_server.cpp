@@ -293,7 +293,7 @@ void handleClient(int clientSocket) {
 }
 
 // Основная функция веб-сервера
-void startTelemetryServer(CrsfSerial* crsf, int port = 8080, int updateIntervalMs = 50) {
+void startTelemetryServer(CrsfSerial* crsf, int port = 8080, int updateIntervalMs = 10) {
     std::cout << "🌐 Запуск веб-сервера телеметрии (реалтайм " << updateIntervalMs << "мс)..." << std::endl;
     crsfInstance = crsf;
     

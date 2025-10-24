@@ -3,7 +3,7 @@
 
 #define USE_CRSF_RECV true   // включить приём CRSF на Raspberry Pi
 #define USE_CRSF_SEND true   // включить отправку телеметрии CRSF
-#define USE_LOG true          // включить журналы (если используются)
+#define USE_LOG false    // включить журналы (если используются)
 
 #define DEVICE_1 false  // режим: 1 — Н-мост с ШИМ и направлением; 2 — сервоприводы 50 Гц
 #define DEVICE_2 false
