@@ -9,7 +9,8 @@ SRC := \
 	libs/SerialPort.cpp \
 	libs/rpi_hal.cpp \
 	libs/crsf/crc8.cpp \
-	libs/joystick.cpp
+	libs/joystick.cpp \
+	telemetry_server.cpp
 
 OBJ := $(SRC:.cpp=.o)
 

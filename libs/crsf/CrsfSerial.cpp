@@ -1,6 +1,7 @@
 #include "CrsfSerial.h"
 #include <cstring>
 #include "../log.h"
+#include "../../telemetry_server.h"
 
 // extern SoftwareSerial softSerial;
 
@@ -371,6 +372,9 @@ void CrsfSerial::packetAttitude(const crsf_header_t* p)
         log_info("ATTITUDE: Pitch=" + std::to_string(pitch/100.0f) + 
                 "° Roll=" + std::to_string(roll/100.0f) + 
                 "° Yaw=" + std::to_string(yaw/100.0f) + "°");
+        
+        // Обновляем данные телеметрии
+        updateTelemetryAttitude(pitch/100.0, roll/100.0, yaw/100.0);
     }
 }
 
@@ -380,6 +384,9 @@ void CrsfSerial::packetFlightMode(const crsf_header_t* p)
     if (p->frame_size > 0) {
         std::string flightMode((char*)p->data, p->frame_size - 1); // -1 для CRC
         log_info("FLIGHT_MODE: " + flightMode);
+        
+        // Обновляем данные телеметрии
+        updateTelemetryFlightMode(flightMode);
     }
 }
 
@@ -397,6 +404,9 @@ void CrsfSerial::packetBatterySensor(const crsf_header_t* p)
                 std::to_string(current) + "mA " + 
                 std::to_string(capacity) + "mAh " + 
                 std::to_string(remaining) + "%");
+        
+        // Обновляем данные телеметрии
+        updateTelemetryBattery(voltage/100.0, current, capacity, remaining);
     }
 }
 

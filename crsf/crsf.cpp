@@ -141,6 +141,11 @@ void crsfSendChannels()
   crsf->packetChannelsSend(); // Используем указатель на активный порт
 }
 
+void* crsfGetActive()
+{
+  return (void*)crsf; // Возвращаем указатель на активный CRSF объект
+}
+
 void loop_ch()
 {
   static uint32_t newTime;

@@ -3,6 +3,7 @@
 #include "crsf/crsf.h"
 #include "libs/rpi_hal.h"
 #include "libs/joystick.h"
+#include "telemetry_server.h"
 
 // Главная точка входа Linux-приложения для Raspberry Pi
 // Полная замена Arduino setup()/loop()
@@ -36,6 +37,10 @@ int main() {
   } else {
     printf("Предупреждение: джойстик недоступен, работа без управления\n");
   }
+
+  // Запуск веб-сервера телеметрии
+  printf("Запуск веб-сервера телеметрии...\n");
+  startTelemetryServer((CrsfSerial*)crsfGetActive(), 8080);
 
   // Главный цикл
   for (;;) {
