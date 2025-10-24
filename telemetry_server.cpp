@@ -10,6 +10,8 @@
 #include <mutex>
 #include <map>
 #include <iomanip>
+#include <vector>
+#include <algorithm>
 #include "libs/crsf/CrsfSerial.h"
 #include "libs/log.h"
 
@@ -94,8 +96,10 @@ public:
             telemetry_data.active_port = "Порт 1"; // Можно улучшить логику определения
             
             telemetry_data.last_update = telemetry_data.timestamp;
+            
         }
     }
+    
     
     std::string generateHTML() {
         std::lock_guard<std::mutex> lock(telemetry_mutex);
@@ -235,57 +239,6 @@ public:
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
     </style>
-    <script>
-        // AJAX обновление данных каждые 1 секунду
-        function updateTelemetry() {
-            fetch('/api/telemetry')
-                .then(response => response.json())
-                .then(data => {
-                    // Обновляем статус связи
-                    const linkStatus = document.getElementById('link-status');
-                    const linkText = document.getElementById('link-text');
-                    linkStatus.className = 'status-indicator ' + (data.link_up ? 'online' : '');
-                    linkText.textContent = data.link_up ? 'Активна' : 'Потеряна';
-                    
-                    // Обновляем активный порт
-                    document.querySelector('.status-item:nth-child(2) strong').textContent = data.active_port;
-                    
-                    // Обновляем время последнего обновления
-                    document.querySelector('.status-item:nth-child(3) strong').textContent = data.last_update;
-                    
-                    // Обновляем данные батареи
-                    const batteryCard = document.querySelector('.card h3').parentElement;
-                    const batteryRows = batteryCard.querySelectorAll('.data-row');
-                    batteryRows[0].querySelector('.data-value').textContent = data.battery.voltage + ' В';
-                    batteryRows[1].querySelector('.data-value').textContent = data.battery.current + ' мА';
-                    batteryRows[2].querySelector('.data-value').textContent = data.battery.capacity + ' мАч';
-                    batteryRows[3].querySelector('.data-value').textContent = data.battery.remaining + ' %';
-                    
-                    // Обновляем данные положения
-                    const attitudeCard = document.querySelectorAll('.card')[1];
-                    const attitudeRows = attitudeCard.querySelectorAll('.data-row');
-                    attitudeRows[0].querySelector('.data-value').textContent = data.attitude.roll + '°';
-                    attitudeRows[1].querySelector('.data-value').textContent = data.attitude.pitch + '°';
-                    attitudeRows[2].querySelector('.data-value').textContent = data.attitude.yaw + '°';
-                    attitudeRows[3].querySelector('.data-value').textContent = data.flight_mode;
-                    
-                    // Обновляем RC каналы
-                    const channelItems = document.querySelectorAll('.channel-item');
-                    for (let i = 0; i < 16; i++) {
-                        channelItems[i].querySelector('.channel-value').textContent = data.channels[i];
-                    }
-                })
-                .catch(error => {
-                    console.error('Ошибка получения данных:', error);
-                });
-        }
-        
-        // Запускаем обновление каждую секунду
-        setInterval(updateTelemetry, 1000);
-        
-        // Первое обновление сразу
-        updateTelemetry();
-    </script>
 </head>
 <body>
     <div class="auto-refresh">
@@ -378,9 +331,83 @@ public:
     </div>
     
     <script>
-        // Обновляем индикатор связи
-        document.getElementById('link-status').className = 'status-indicator ' + ()" << (telemetry_data.link_up ? "'online'" : "''") << R"();
-        document.getElementById('link-text').textContent = ')" << (telemetry_data.link_up ? "Активна" : "Потеряна") << R"(';
+        // Простое AJAX обновление каждую секунду
+        function updateData() {
+            fetch('/api/telemetry')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Получены данные:', data);
+                    
+                    // Обновляем статус связи
+                    const linkStatus = document.getElementById('link-status');
+                    const linkText = document.getElementById('link-text');
+                    if (linkStatus && linkText) {
+                        linkStatus.className = 'status-indicator ' + (data.link_up ? 'online' : '');
+                        linkText.textContent = data.link_up ? 'Активна' : 'Потеряна';
+                    }
+                    
+                    // Обновляем активный порт
+                    const portElement = document.querySelector('.status-item:nth-child(2) strong');
+                    if (portElement) {
+                        portElement.textContent = data.active_port;
+                    }
+                    
+                    // Обновляем время последнего обновления
+                    const updateElement = document.querySelector('.status-item:nth-child(3) strong');
+                    if (updateElement) {
+                        updateElement.textContent = data.last_update;
+                    }
+                    
+                    // Обновляем данные батареи
+                    const allCards = document.querySelectorAll('.card');
+                    for (let card of allCards) {
+                        const h3 = card.querySelector('h3');
+                        if (h3 && h3.textContent.includes('Батарея')) {
+                            const batteryRows = card.querySelectorAll('.data-row');
+                            if (batteryRows.length >= 4) {
+                                batteryRows[0].querySelector('.data-value').textContent = data.battery.voltage + ' В';
+                                batteryRows[1].querySelector('.data-value').textContent = data.battery.current + ' мА';
+                                batteryRows[2].querySelector('.data-value').textContent = data.battery.capacity + ' мАч';
+                                batteryRows[3].querySelector('.data-value').textContent = data.battery.remaining + ' %';
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Обновляем данные положения
+                    for (let card of allCards) {
+                        const h3 = card.querySelector('h3');
+                        if (h3 && h3.textContent.includes('Положение')) {
+                            const attitudeRows = card.querySelectorAll('.data-row');
+                            if (attitudeRows.length >= 4) {
+                                attitudeRows[0].querySelector('.data-value').textContent = data.attitude.roll + '°';
+                                attitudeRows[1].querySelector('.data-value').textContent = data.attitude.pitch + '°';
+                                attitudeRows[2].querySelector('.data-value').textContent = data.attitude.yaw + '°';
+                                attitudeRows[3].querySelector('.data-value').textContent = data.flight_mode;
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Обновляем RC каналы
+                    const channelItems = document.querySelectorAll('.channel-item');
+                    for (let i = 0; i < Math.min(16, channelItems.length); i++) {
+                        const channelValue = channelItems[i].querySelector('.channel-value');
+                        if (channelValue) {
+                            channelValue.textContent = data.channels[i];
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка получения данных:', error);
+                });
+        }
+        
+        // Запускаем обновление каждую секунду
+        setInterval(updateData, 1000);
+        
+        // Первое обновление сразу
+        updateData();
     </script>
 </body>
 </html>)";
@@ -456,6 +483,15 @@ public:
         log_info("Веб-сервер телеметрии запущен на порту " + std::to_string(port));
         log_info("Откройте браузер: http://localhost:" + std::to_string(port));
         
+        // Запускаем фоновый поток для обновления телеметрии
+        std::thread telemetry_thread([this]() {
+            while (true) {
+                updateTelemetry();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Обновляем каждые 100мс
+            }
+        });
+        telemetry_thread.detach();
+        
         // Основной цикл сервера
         while (true) {
             int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
@@ -468,9 +504,6 @@ public:
             char buffer[1024] = {0};
             read(new_socket, buffer, 1024);
             std::string request(buffer);
-            
-            // Обновляем телеметрию
-            updateTelemetry();
             
             std::string response;
             
