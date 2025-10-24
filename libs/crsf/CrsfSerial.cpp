@@ -1,6 +1,6 @@
 #include "CrsfSerial.h"
-#include <SoftwareSerial.h>
-#include "config.h"
+#include <cstring>
+#include "../log.h"
 
 // extern SoftwareSerial softSerial;
 
@@ -34,13 +34,13 @@
 //     }
 // }
 
-CrsfSerial::CrsfSerial(HardwareSerial& port, uint32_t baud) :
+// Конструктор под Raspberry Pi: SerialPort уже открыт с нужной скоростью
+CrsfSerial::CrsfSerial(SerialPort& port, uint32_t baud) :
     _port(port), _crc(0xd5), _baud(baud),
     _lastReceive(0), _lastChannelsPacket(0), _linkIsUp(false),
     _passthroughMode(false)
 {
-    // Crsf serial is 420000 baud for V2
-    _port.begin(_baud);
+    // Ничего дополнительно не делаем: открытие и настройка порта снаружи
 }
 
 // Call from main loop to update
@@ -51,9 +51,15 @@ void CrsfSerial::loop()
 
 void CrsfSerial::handleSerialIn()
 {
-    while (_port.available()) {
-        uint8_t b = _port.read();
-        _lastReceive = millis();
+    // Читаем не более 32 байт за раз, чтобы не блокировать основной цикл
+    for (int i = 0; i < 32; ++i) { 
+        uint8_t b;
+        int r = _port.readByte(b);
+        if (r <= 0) {
+            break; // Прерываем, если в порту больше нет данных
+        }
+
+        _lastReceive = rpi_millis();
 
         if (_passthroughMode) {
             if (onShiftyByte)
@@ -62,12 +68,9 @@ void CrsfSerial::handleSerialIn()
         }
 
         _rxBuf[_rxBufPos++] = b;
-        // softSerial.print(" ");
-        // softSerial.print(b, HEX);
         handleByteReceived();
 
         if (_rxBufPos == CRSF_MAX_PACKET_SIZE) {
-            // Packet buffer filled and no valid packet found, dump the whole thing
             _rxBufPos = 0;
         }
     }
@@ -98,7 +101,8 @@ void CrsfSerial::handleByteReceived()
                     shiftRxBuffer(len + 2);
                     reprocess = true;
                 } else {
-                    shiftRxBuffer(1);
+                    // Отбрасываем ВЕСЬ битый пакет, а не один байт
+                    shiftRxBuffer(len + 2);
                     reprocess = true;
                 }
             }  // if complete packet
@@ -109,14 +113,14 @@ void CrsfSerial::handleByteReceived()
 void CrsfSerial::checkPacketTimeout()
 {
     // If we haven't received data in a long time, flush the buffer a byte at a time (to trigger shiftyByte)
-    if (_rxBufPos > 0 && millis() - _lastReceive > CRSF_PACKET_TIMEOUT_MS)
+    if (_rxBufPos > 0 && rpi_millis() - _lastReceive > CRSF_PACKET_TIMEOUT_MS)
         while (_rxBufPos)
             shiftRxBuffer(1);
 }
 
 void CrsfSerial::checkLinkDown()
 {
-    if (_linkIsUp && millis() - _lastChannelsPacket > CRSF_FAILSAFE_STAGE1_MS) {
+    if (_linkIsUp && rpi_millis() - _lastChannelsPacket > CRSF_FAILSAFE_STAGE1_MS) {
         if (onLinkDown)
             onLinkDown();
         _linkIsUp = false;
@@ -137,6 +141,19 @@ void CrsfSerial::processPacketIn(uint8_t len)
             break;
         case CRSF_FRAMETYPE_LINK_STATISTICS:
             packetLinkStatistics(hdr);
+            break;
+        case CRSF_FRAMETYPE_ATTITUDE:
+            packetAttitude(hdr);
+            break;
+        case CRSF_FRAMETYPE_FLIGHT_MODE:
+            packetFlightMode(hdr);
+            break;
+        case CRSF_FRAMETYPE_BATTERY_SENSOR:
+            packetBatterySensor(hdr);
+            break;
+        default:
+            // Логируем неизвестные типы пакетов для отладки
+            log_info("CRSF: получен пакет типа " + std::to_string(hdr->type) + " от полетного контроллера");
             break;
         }
     } // CRSF_ADDRESS_FLIGHT_CONTROLLER
@@ -183,16 +200,24 @@ void CrsfSerial::packetChannelsPacked(const crsf_header_t* p)
     _channels[14] = ch->ch14;
     _channels[15] = ch->ch15;
 
-    for (unsigned int i = 0; i < CRSF_NUM_CHANNELS; ++i)
-        _channels[i] = map(_channels[i], CRSF_CHANNEL_VALUE_1000, CRSF_CHANNEL_VALUE_2000, 1000, 2000);
+    // Преобразование CRSF-кода в микросекунды (1000..2000) с точным округлением
+    const int crsfDelta = (CRSF_CHANNEL_VALUE_2000 - CRSF_CHANNEL_VALUE_1000);
+    for (unsigned int i = 0; i < CRSF_NUM_CHANNELS; ++i) {
+        int code = _channels[i];
+        if (code < CRSF_CHANNEL_VALUE_1000) code = CRSF_CHANNEL_VALUE_1000;
+        if (code > CRSF_CHANNEL_VALUE_2000) code = CRSF_CHANNEL_VALUE_2000;
+        int num = (code - CRSF_CHANNEL_VALUE_1000) * 1000;
+        _channels[i] = 1000 + (num + crsfDelta / 2) / crsfDelta; // округление к ближайшему
+    }
 
     if (!_linkIsUp && onLinkUp)
         onLinkUp();
     _linkIsUp = true;
-    _lastChannelsPacket = millis();
+    _lastChannelsPacket = rpi_millis();
 
     if (onPacketChannels)
         onPacketChannels();
+    log_info("CRSF: получены RC-каналы");
 }
 
 void CrsfSerial::packetLinkStatistics(const crsf_header_t* p)
@@ -202,6 +227,7 @@ void CrsfSerial::packetLinkStatistics(const crsf_header_t* p)
 
     if (onPacketLinkStatistics)
         onPacketLinkStatistics(&_linkStatistics);
+    log_info("CRSF: статистика линка обновлена");
 }
 
 void CrsfSerial::packetGps(const crsf_header_t* p)
@@ -220,7 +246,7 @@ void CrsfSerial::packetGps(const crsf_header_t* p)
 
 void CrsfSerial::write(uint8_t b)
 {
-    _port.write(b);
+    _port.writeByte(b);
 }
 
 void CrsfSerial::write(const uint8_t* buf, size_t len)
@@ -251,7 +277,7 @@ void CrsfSerial::queuePacket(uint8_t addr, uint8_t type, const void* payload, ui
     // buf[len + 4] = 0x45;
     // buf[3] = 0x03;
     // Busywait until the serial port seems free
-    //while (millis() - _lastReceive < 2)
+    //while (rpi_millis() - _lastReceive < 2)
     //    loop();
     // for (int i = 0; i < 25; i++) {
     //     buf[i] = 0;
@@ -261,25 +287,48 @@ void CrsfSerial::queuePacket(uint8_t addr, uint8_t type, const void* payload, ui
     //         Serial.print(0, BYTE);
     //     }
     // }
+    printf("ОТПРАВКА ПАКЕТА ТИПА %d\n", type);
     write(buf, len + 4);
+    // log_info("CRSF: отправлен пакет типа " + std::to_string(type));
 }
 
 void CrsfSerial::setPassthroughMode(bool val, unsigned int baud)
 {
     _passthroughMode = val;
+    // На Raspberry Pi не перенастраиваем порт здесь; просто очищаем буфер
     _port.flush();
-    if (baud != 0)
-        _port.begin(baud);
-    else
-        _port.begin(_baud);
 }
 
 void CrsfSerial::packetChannelsSend()
 {
 
     static int channels[CRSF_NUM_CHANNELS];
+    const int crsfDelta = (CRSF_CHANNEL_VALUE_2000 - CRSF_CHANNEL_VALUE_1000);
     for (unsigned int i = 0; i < CRSF_NUM_CHANNELS; ++i) {
-        channels[i] = map(_channels[i], 1000, 2000, CRSF_CHANNEL_VALUE_1000, CRSF_CHANNEL_VALUE_2000);
+        int usTarget = _channels[i];
+        if (usTarget < 1000) usTarget = 1000;
+        if (usTarget > 2000) usTarget = 2000;
+
+        // Первичное кодирование (округление к ближайшему)
+        int num = (usTarget - 1000) * crsfDelta;
+        int code = CRSF_CHANNEL_VALUE_1000 + (num + 500) / 1000;
+        if (code > CRSF_CHANNEL_VALUE_2000) code = CRSF_CHANNEL_VALUE_2000;
+        if (code < CRSF_CHANNEL_VALUE_1000) code = CRSF_CHANNEL_VALUE_1000;
+
+        // Проверка: декодирование должно дать ровно usTarget
+        int decodedUs = 1000 + ((code - CRSF_CHANNEL_VALUE_1000) * 1000 + crsfDelta / 2) / crsfDelta;
+        if (decodedUs < usTarget && code < CRSF_CHANNEL_VALUE_2000) {
+            // Подправим вверх до точного совпадения, шаг обычно <= 1
+            int code2 = code + 1;
+            int decoded2 = 1000 + ((code2 - CRSF_CHANNEL_VALUE_1000) * 1000 + crsfDelta / 2) / crsfDelta;
+            if (decoded2 == usTarget) code = code2;
+        } else if (decodedUs > usTarget && code > CRSF_CHANNEL_VALUE_1000) {
+            int code2 = code - 1;
+            int decoded2 = 1000 + ((code2 - CRSF_CHANNEL_VALUE_1000) * 1000 + crsfDelta / 2) / crsfDelta;
+            if (decoded2 == usTarget) code = code2;
+        }
+
+        channels[i] = code;
     }
 
     crsf_channels_t ch;
@@ -304,5 +353,50 @@ void CrsfSerial::packetChannelsSend()
     _linkIsUp = true;
     _passthroughMode = false;
     queuePacket(CRSF_ADDRESS_FLIGHT_CONTROLLER, CRSF_FRAMETYPE_RC_CHANNELS_PACKED, (void*)&ch, 22);
+}
+
+void CrsfSerial::packetAttitude(const crsf_header_t* p)
+{
+    if (p->frame_size >= 6) {
+        int16_t pitch = be16toh(*(int16_t*)&p->data[0]);
+        int16_t roll = be16toh(*(int16_t*)&p->data[2]);
+        int16_t yaw = be16toh(*(int16_t*)&p->data[4]);
+
+        // Выводим сырые значения
+        log_info("RAW ATTITUDE: P=" + std::to_string(pitch) + 
+                 " R=" + std::to_string(roll) + 
+                 " Y=" + std::to_string(yaw));
+
+        // Выводим преобразованные значения
+        log_info("ATTITUDE: Pitch=" + std::to_string(pitch/100.0f) + 
+                "° Roll=" + std::to_string(roll/100.0f) + 
+                "° Yaw=" + std::to_string(yaw/100.0f) + "°");
+    }
+}
+
+void CrsfSerial::packetFlightMode(const crsf_header_t* p)
+{
+    // FLIGHT_MODE пакет содержит строку с режимом полета
+    if (p->frame_size > 0) {
+        std::string flightMode((char*)p->data, p->frame_size - 1); // -1 для CRC
+        log_info("FLIGHT_MODE: " + flightMode);
+    }
+}
+
+void CrsfSerial::packetBatterySensor(const crsf_header_t* p)
+{
+    // BATTERY_SENSOR пакет содержит напряжение, ток, емкость
+    if (p->frame_size >= 8) {
+        uint16_t voltage = be16toh(*(uint16_t*)&p->data[0]); // мВ
+        uint16_t current = be16toh(*(uint16_t*)&p->data[2]); // мА
+        // Читаем 24-битное значение емкости
+        uint32_t capacity = (p->data[4] << 16) | (p->data[5] << 8) | p->data[6]; // мАч
+        uint8_t remaining = p->data[7]; // %
+        
+        log_info("BATTERY: " + std::to_string(voltage/100.0f) + "V " + 
+                std::to_string(current) + "mA " + 
+                std::to_string(capacity) + "mAh " + 
+                std::to_string(remaining) + "%");
+    }
 }
 

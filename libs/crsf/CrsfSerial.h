@@ -1,20 +1,25 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <cstdint>
 #include "crc8.h"
 #include "crsf_protocol.h"
+#include "../SerialPort.h"
+#include "../rpi_hal.h"
 
 enum eFailsafeAction { fsaNoPulses, fsaHold };
 
+// Реализация CRSF поверх SerialPort (Raspberry Pi)
 class CrsfSerial
 {
 public:
 // Packet timeout where buffer is flushed if no data is received in this time
 static const unsigned int CRSF_PACKET_TIMEOUT_MS = 100;
 static const unsigned int CRSF_FAILSAFE_STAGE1_MS = 60000;
-uint32_t _lastReceive;
+uint32_t _lastReceive; // время последнего приёма (мс), rpi_millis()
 
-CrsfSerial(HardwareSerial& port, uint32_t baud = CRSF_BAUDRATE);
+// Конструктор: принимает ссылку на SerialPort и скорость
+CrsfSerial(SerialPort& port, uint32_t baud = CRSF_BAUDRATE);
 void loop();
 void write(uint8_t b);
 void write(const uint8_t* buf, size_t len);
@@ -46,8 +51,11 @@ void setChannel(unsigned int ch, int value)
     void (*onPacketGps)(crsf_sensor_gps_t* gpsSensor);
 
     void packetChannelsSend();
+    void packetAttitude(const crsf_header_t* p);
+    void packetFlightMode(const crsf_header_t* p);
+    void packetBatterySensor(const crsf_header_t* p);
 private:
-    HardwareSerial& _port;
+    SerialPort& _port;
     uint8_t _rxBuf[CRSF_MAX_PACKET_SIZE];
     uint8_t _rxBufPos;
     Crc8 _crc;

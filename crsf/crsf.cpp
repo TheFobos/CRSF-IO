@@ -1,50 +1,38 @@
-// Реализация логики CRSF: приём каналов, переключение линка, телеметрия
-/* Arduino-специфичный код. Отключено для сборки на Raspberry Pi.
 #include "crsf.h"
 
-// Компилируем только если задействован приём или передача CRSF
-// Компилируем только если задействован приём или передача CRSF
 #if USE_CRSF_RECV == true || USE_CRSF_SEND == true
 #include "libs/crsf/CrsfSerial.h"
+#include "libs/log.h"
 
-HardwareTimer timer(TIM4);
-HardwareSerial Serial_1(USART1);
-#define softSerial Serial_1
-
-// Два интерфейса CRSF: основной (Serial2) и резервный (softSerial)
-CrsfSerial crsf_1(Serial2, CRSF_BAUDRATE);
-CrsfSerial crsf_2(softSerial, CRSF_BAUDRATE);
-// Текущий активный линк (по умолчанию основной)
-CrsfSerial *crsf = &crsf_1;
+// Raspberry Pi: создаём два последовательных порта для CRSF
+// Примечание: вам может потребоваться включить UART в raspi-config и накатить оверлеи
+static SerialPort crsfPort1(CRSF_PORT_PRIMARY, CRSF_BAUD);
+static SerialPort crsfPort2(CRSF_PORT_SECONDARY, CRSF_BAUD);
+static CrsfSerial crsf_1(crsfPort1, CRSF_BAUD);
+static CrsfSerial crsf_2(crsfPort2, CRSF_BAUD);
+static CrsfSerial *crsf = &crsf_1;
 
 #if PIN_INIT == true
 uint32_t old_time_rele1 = 0;
 uint32_t old_time_rele2 = 0;
-/* конец Arduino-части */
 #endif
-*/
-// Метка времени для контроля активности по UART/CRSF
-uint32_t old_time_uart = 0;
 
-// Колбэк: обработка входящих каналов CRSF
 void packetChannels()
 {
   static int16_t origCh1;
   static int16_t origCh2;
-  static int16_t origCh5;
-  static int16_t origCh8;
+  // резервные каналы (не используются, оставлены для совместимости)
+  // static int16_t origCh5;
+  // static int16_t origCh8;
   static int16_t ch1;
   static int16_t ch2;
 
-  // Читаем каналы стиков/переключателей
   origCh1 = crsf->getChannel(1);
   origCh2 = crsf->getChannel(2);
-  origCh5 = crsf->getChannel(5);
-  origCh8 = crsf->getChannel(8);
-  old_time_uart = millis(); // обновляем время последней активности
+  // origCh5 = crsf->getChannel(5);
+  // origCh8 = crsf->getChannel(8);
 
 #if DEVICE_1 == true
-  // Нормализация диапазона под управление дифференциальным приводом
   origCh2 = origCh2 / 2 - 750;
   origCh1
   
@@ -53,7 +41,6 @@ void packetChannels()
   ch2 = -
   (origCh1 + origCh2) / 2;
 
-  // Мёртвая зона для подавления шума вокруг центра
 #define DEAD_ZONE 50
   if (ch1 > -DEAD_ZONE && ch1 < DEAD_ZONE)
   {
@@ -65,36 +52,33 @@ void packetChannels()
     ch2 = 0;
   }
 
-  // Управление мотором 1: направление через digital, величина через analogWrite
   if (ch1 < 0)
   {
-    digitalWrite(motor_1_digital, HIGH);
-    analogWrite(motor_1_analog, -ch1);
+    // Направление и ШИМ для мотора 1
+    rpi_gpio_write(motor_1_digital, true);
+    rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, static_cast<uint32_t>(-ch1));
   }
   else
   {
-    digitalWrite(motor_1_digital, LOW);
-    analogWrite(motor_1_analog, ch1);
+    rpi_gpio_write(motor_1_digital, false);
+    rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, static_cast<uint32_t>(ch1));
   }
 
-  // Управление мотором 2 аналогично
   if (ch2 < 0)
   {
-    digitalWrite(motor_2_digital, HIGH);
-    analogWrite(motor_2_analog, -ch2);
+    rpi_gpio_write(motor_2_digital, true);
+    rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, static_cast<uint32_t>(-ch2));
   }
   else
   {
-    digitalWrite(motor_2_digital, LOW);
-    analogWrite(motor_2_analog, ch2);
+    rpi_gpio_write(motor_2_digital, false);
+    rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, static_cast<uint32_t>(ch2));
   }
 #elif DEVICE_2 == true
-  // Аппаратный PWM: задаём импульс в мкс (1000..2000)
-  timer.setCaptureCompare(timer_ch_motor_1, origCh2, MICROSEC_COMPARE_FORMAT);
-  timer.setCaptureCompare(timer_ch_motor_2, origCh1, MICROSEC_COMPARE_FORMAT);
+  rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, static_cast<uint32_t>(origCh2));
+  rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, static_cast<uint32_t>(origCh1));
 #endif
 #if PIN_INIT == true
-  // Логика удержания кнопки: если переключатель активен > 3с — включить реле
   if (origCh5 > 1800)
   {
     if (old_time_rele1 == 0)
@@ -128,59 +112,70 @@ void packetChannels()
 #endif
 }
 
-// Индикация поднятия линка: гасим LED (активен низкий уровень)
 static void crsfLinkUp()
 {
-  digitalWrite(LED_BUILTIN, LOW);
+  // Загорается индикатор связи: опустим GPIO LED_BUILTIN
+  rpi_gpio_write(LED_BUILTIN, false);
+  log_info("CRSF: Link UP");
 }
 
-// Падение линка на резервном канале: переключаемся на основной
 static void crsfLinkDown_2()
 {
   crsf = &crsf_1;
-  digitalWrite(camera, LOW);
-  old_time_uart = millis();
+  log_warn("CRSF: переключение на основной порт");
 }
 
-// Падение линка на основном канале: переключаемся на резервный
 static void crsfLinkDown()
 {
   crsf = &crsf_2;
-  digitalWrite(camera, HIGH);
-  old_time_uart = millis();
+  log_warn("CRSF: переключение на резервный порт");
 }
 
-// Поставить значение канала для отправки на основной линк
 void crsfSetChannel(unsigned int ch, int value)
 {
   crsf_1.setChannel(ch, value);
 }
 
-// Отправить пакет с каналами на приёмник
 void crsfSendChannels()
 {
   crsf_1.packetChannelsSend();
 }
 
-// Периодический обработчик (вызывать часто): таймаут линка, failsafe, crsf->loop()
 void loop_ch()
 {
   static uint32_t newTime;
-  newTime = millis();
-  // Если долго нет активности — переключаем линк (попытка восстановления)
-  if (newTime - old_time_uart > 60000)
+  newTime = rpi_millis();
+
+  // ПРОВЕРКА ПОТЕРИ СВЯЗИ (FAILSAFE)
+  // Если от полетника не было НИКАКИХ данных более 1 секунды (1000 мс)
+  if (newTime - crsf->_lastReceive > 1000)
   {
-    if (crsf == &crsf_1)
-    {
-      crsfLinkDown();
-    }
-    else
-    {
-      crsfLinkDown_2();
-    }
+      // Устанавливаем моторы/сервы в безопасное положение
+      #if DEVICE_1 == true
+          rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, 0);
+          rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, 0);
+      #elif DEVICE_2 == true
+          rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, 1500);
+          rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, 1500);
+      #endif
   }
+
+  // ПРОВЕРКА ДЛЯ ПЕРЕКЛЮЧЕНИЯ ПОРТОВ
+  // Если от полетника не было НИКАКИХ данных более 10 секунд (10000 мс)
+  // И если связь вообще когда-либо была (_lastReceive != 0)
+  if ((crsf->_lastReceive != 0) && (newTime - crsf->_lastReceive > 10000))
+  {
+      if (crsf == &crsf_1)
+      {
+        crsfLinkDown(); // Переключаемся на порт 2
+      }
+      else
+      {
+        crsfLinkDown_2(); // Переключаемся на порт 1
+      }
+  }
+
   #if PIN_INIT == true
-  // Включение реле после удержания > 3 секунд
   if (old_time_rele1 > 0)
   {
     if (newTime - old_time_rele1 > 3000)
@@ -191,83 +186,83 @@ void loop_ch()
   if (old_time_rele2 > 0)
   {
     if (newTime - old_time_rele2 > 3000)
-
     {
       digitalWrite(rele_2, HIGH);
     }
   }
   #endif
-  // Failsafe: если нет пакетов >100 мс — остановить/задать нейтраль
-  if (newTime - crsf->_lastReceive > 100)
-  {
-    #if DEVICE_1 == true
-        analogWrite(motor_1_analog, 0);
-        analogWrite(motor_2_analog, 0);
-    #elif DEVICE_2 == true
-        timer.setCaptureCompare(timer_ch_motor_1, 1500, MICROSEC_COMPARE_FORMAT);
-        timer.setCaptureCompare(timer_ch_motor_2, 1500, MICROSEC_COMPARE_FORMAT);
-    #endif
-  }
-  // Внутренний цикл CRSF (приём/парсинг/колбэки)
+
+  // Вызываем обработчик текущего активного порта
   crsf->loop();
 }
 
-// Настройка таймера TIM4 для генерации PWM 50 Гц на PB6/PB7
 void PWMinit()
 {
-  pinMode(motor_1_analog, OUTPUT); // Канал 1 TIM4 → PB6
-  pinMode(motor_2_analog, OUTPUT); // Канал 2 TIM4 → PB7
-  timer.pause();
-  timer.setPrescaleFactor(72);               // 1 МГц (72 МГц / 72)
-  timer.setOverflow(20000, MICROSEC_FORMAT); // Период 20 мс (50 Гц)
-  // Настройка каналов
-  timer.setMode(timer_ch_motor_1, TIMER_OUTPUT_COMPARE_PWM1, motor_1_analog); // Канал 1 → PB6
-  timer.setCaptureCompare(timer_ch_motor_1, 1500, MICROSEC_COMPARE_FORMAT);
-  timer.setMode(timer_ch_motor_2, TIMER_OUTPUT_COMPARE_PWM1, motor_2_analog); // Канал 2 → PB7
-  timer.setCaptureCompare(timer_ch_motor_2, 1500, MICROSEC_COMPARE_FORMAT);
-  timer.resume(); // Запуск таймера                             // Запускаем таймер
+  // Raspberry Pi: настраиваем GPIO и PWM для каналов моторов
+  rpi_gpio_export(motor_1_digital);
+  rpi_gpio_export(motor_2_digital);
+  rpi_gpio_set_mode(motor_1_digital, RpiGpioMode::Output);
+  rpi_gpio_set_mode(motor_2_digital, RpiGpioMode::Output);
+  // PWM: 50 Гц для сервоприводов/ESC, начальное положение 1500 мкс
+  rpi_pwm_export({PWM_CHIP_M1, PWM_NUM_M1});
+  rpi_pwm_export({PWM_CHIP_M2, PWM_NUM_M2});
+  rpi_pwm_set_frequency({PWM_CHIP_M1, PWM_NUM_M1}, 50);
+  rpi_pwm_set_frequency({PWM_CHIP_M2, PWM_NUM_M2}, 50);
+  rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, 1500);
+  rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, 1500);
+  rpi_pwm_enable({PWM_CHIP_M1, PWM_NUM_M1}, true);
+  rpi_pwm_enable({PWM_CHIP_M2, PWM_NUM_M2}, true);
+  log_info("PWM: инициализировано 50 Гц, старт 1500 мкс на обоих каналах");
 }
 
-// Инициализация программного управления моторами (обнуляем ШИМ, настраиваем направления)
 void analogInit()
 {
-  analogWrite(motor_1_analog, 0);
-  analogWrite(motor_2_analog, 0);
-  pinMode(motor_2_digital, OUTPUT);
-  pinMode(motor_1_digital, OUTPUT);
+  // Устанавливаем нулевую скважность PWM и готовим цифровые пины направления
+  rpi_pwm_set_duty_us({PWM_CHIP_M1, PWM_NUM_M1}, 0);
+  rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, 0);
+  rpi_gpio_set_mode(motor_2_digital, RpiGpioMode::Output);
+  rpi_gpio_set_mode(motor_1_digital, RpiGpioMode::Output);
 }
 
-// Инициализация пинов реле и камеры, установка безопасных начальных уровней
 void pinInit()
 {
-  pinMode(camera, OUTPUT);
-  pinMode(rele_1, OUTPUT);
-  pinMode(rele_2, OUTPUT);
-  digitalWrite(camera, LOW);
-  digitalWrite(rele_2, LOW);
-  digitalWrite(rele_1, LOW);
+  // Инициализация пинов: камера и реле — в низкий уровень (выключено)
+  rpi_gpio_set_mode(camera, RpiGpioMode::Output);
+  rpi_gpio_set_mode(rele_1, RpiGpioMode::Output);
+  rpi_gpio_set_mode(rele_2, RpiGpioMode::Output);
+  rpi_gpio_write(camera, false);
+  rpi_gpio_write(rele_2, false);
+  rpi_gpio_write(rele_1, false);
+  log_info("Пины: камера/реле инициализированы (LOW)");
 }
 
-// Настройка портов и колбэков CRSF для приёма каналов на двух UARTах
 void crsfInitRecv()
 {
-  Serial2.begin(CRSF_BAUD);
-  softSerial.begin(CRSF_BAUD);
+  // Открываем последовательные порты для CRSF
+  crsfPort1.open();
+  crsfPort2.open();
+  log_info(std::string("UART1: ") + (crsfPort1.isOpen() ? "OK" : "FAIL"));
+  log_info(std::string("UART2: ") + (crsfPort2.isOpen() ? "OK" : "FAIL"));
   crsf_2.onPacketChannels = &packetChannels;
   crsf_2.onLinkUp = &crsfLinkUp;
   crsf_2.onLinkDown = &crsfLinkDown_2;
   crsf_1.onPacketChannels = &packetChannels;
   crsf_1.onLinkUp = &crsfLinkUp;
   crsf_1.onLinkDown = &crsfLinkDown;
+  // Простейшие проверки порта
+  // Если основной порт не открылся — переключаемся на вторичный
+  if (!crsfPort1.isOpen() && crsfPort2.isOpen()) {
+    crsf = &crsf_2;
+    log_warn("CRSF: основной порт недоступен, используем резервный");
+  }
 }
 
-// Инициализация UART для отправки телеметрии CRSF через Serial
 void crsfInitSend()
 {
-  Serial.begin(CRSF_BAUD);
+  // Для Raspberry Pi используем первичный порт
+  crsfPort1.open();
 }
 
-// Формат пакета CRSF для датчика батареи
 struct packet_CRSF_FRAMETYPE_BATTERY_SENSOR
 {
   uint16_t voltage;
@@ -276,17 +271,18 @@ struct packet_CRSF_FRAMETYPE_BATTERY_SENSOR
   uint8_t remaining;
 };
 
-#define swap2Bytes(x) ((((x) >> 8) & 0xFF) | ((x) << 8)) // big-endian <-> little-endian
+#define swap2Bytes(x) ((((x) >> 8) & 0xFF) | ((x) << 8))
 
-// Отправить телеметрию батареи по CRSF (напряжение/ток/ёмкость/процент)
 void crsfTelemetrySend()
 {
   static packet_CRSF_FRAMETYPE_BATTERY_SENSOR packet;
-  static uint16_t kR = (47000 + 3300) / 33;
+  // static uint16_t kR = (47000 + 3300) / 33; // коэффициент делителя (не используется на RPi)
   packet.remaining = 0;
   uint16_t v = (uint16_t)((27.8 * 1000) / 100);
 
-  v = analogRead(A1) * 3.3 * 10 * kR / 1024 / 100;
+  // На Raspberry Pi нет аналогового входа по умолчанию; оставим заглушку
+  // v = измеренное напряжение (мВ) — замените на чтение из вашего АЦП
+  // v = read_adc_mv() * kR / 100; // пример
   uint16_t c = 0;
   packet.voltage = swap2Bytes(v);
   packet.current = swap2Bytes(c);
