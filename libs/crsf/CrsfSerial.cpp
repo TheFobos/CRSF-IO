@@ -39,7 +39,9 @@
 CrsfSerial::CrsfSerial(SerialPort& port, uint32_t baud) :
     _port(port), _crc(0xd5), _baud(baud),
     _lastReceive(0), _lastChannelsPacket(0), _linkIsUp(false),
-    _passthroughMode(false)
+    _passthroughMode(false),
+    _batteryVoltage(0.0), _batteryCurrent(0.0), _batteryCapacity(0.0), _batteryRemaining(0),
+    _attitudeRoll(0.0), _attitudePitch(0.0), _attitudeYaw(0.0)
 {
     // Ничего дополнительно не делаем: открытие и настройка порта снаружи
 }
@@ -373,8 +375,10 @@ void CrsfSerial::packetAttitude(const crsf_header_t* p)
                 "° Roll=" + std::to_string(roll/100.0f) + 
                 "° Yaw=" + std::to_string(yaw/100.0f) + "°");
         
-        // Обновляем данные телеметрии
-        updateTelemetryAttitude(pitch/100.0, roll/100.0, yaw/100.0);
+        // Сохраняем данные положения
+        _attitudePitch = pitch / 100.0; // Конвертируем в градусы
+        _attitudeRoll = roll / 100.0;
+        _attitudeYaw = yaw / 100.0;
     }
 }
 
@@ -385,8 +389,7 @@ void CrsfSerial::packetFlightMode(const crsf_header_t* p)
         std::string flightMode((char*)p->data, p->frame_size - 1); // -1 для CRC
         log_info("FLIGHT_MODE: " + flightMode);
         
-        // Обновляем данные телеметрии
-        updateTelemetryFlightMode(flightMode);
+        // Данные телеметрии будут обновлены через веб-сервер
     }
 }
 
@@ -405,8 +408,11 @@ void CrsfSerial::packetBatterySensor(const crsf_header_t* p)
                 std::to_string(capacity) + "mAh " + 
                 std::to_string(remaining) + "%");
         
-        // Обновляем данные телеметрии
-        updateTelemetryBattery(voltage/100.0, current, capacity, remaining);
+        // Сохраняем данные батареи
+        _batteryVoltage = voltage / 100.0; // Конвертируем мВ в В
+        _batteryCurrent = current; // мА
+        _batteryCapacity = capacity; // мАч
+        _batteryRemaining = remaining; // %
     }
 }
 

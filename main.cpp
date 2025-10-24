@@ -1,4 +1,5 @@
 #include "config.h"
+#include <thread>
 
 #include "crsf/crsf.h"
 #include "libs/rpi_hal.h"
@@ -38,9 +39,14 @@ int main() {
     printf("Предупреждение: джойстик недоступен, работа без управления\n");
   }
 
-  // Запуск веб-сервера телеметрии
-  printf("Запуск веб-сервера телеметрии...\n");
-  startTelemetryServer((CrsfSerial*)crsfGetActive(), 8080);
+  // Запуск веб-сервера телеметрии в отдельном потоке
+  std::thread webServerThread([]() {
+    // Ждем инициализации CRSF (уменьшено для реалтайма)
+    rpi_delay_ms(500);
+    startTelemetryServer((CrsfSerial*)crsfGetActive(), 8080);
+  });
+  webServerThread.detach();
+
 
   // Главный цикл
   for (;;) {
@@ -88,8 +94,8 @@ int main() {
 
 
 #endif
-    // Короткая задержка, чтобы не грузить CPU на 100%
-    rpi_delay_ms(1);
+    // Минимальная задержка для реалтайма
+    rpi_delay_ms(0); // Убираем задержку для максимальной скорости
   }
 
   return 0;

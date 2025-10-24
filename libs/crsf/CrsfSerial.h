@@ -38,6 +38,17 @@ void setChannel(unsigned int ch, int value)
 
     const crsfLinkStatistics_t* getLinkStatistics() const { return &_linkStatistics; }
     const crsf_sensor_gps_t* getGpsSensor() const { return &_gpsSensor; }
+    
+    // Методы для получения данных батареи
+    double getBatteryVoltage() const { return _batteryVoltage; }
+    double getBatteryCurrent() const { return _batteryCurrent; }
+    double getBatteryCapacity() const { return _batteryCapacity; }
+    uint8_t getBatteryRemaining() const { return _batteryRemaining; }
+    
+    // Методы для получения данных положения
+    double getAttitudeRoll() const { return _attitudeRoll; }
+    double getAttitudePitch() const { return _attitudePitch; }
+    double getAttitudeYaw() const { return _attitudeYaw; }
     bool isLinkUp() const { return _linkIsUp; }
     bool getPassthroughMode() const { return _passthroughMode; }
     void setPassthroughMode(bool val, unsigned int baud = 0);
@@ -61,6 +72,17 @@ private:
     Crc8 _crc;
     crsfLinkStatistics_t _linkStatistics;
     crsf_sensor_gps_t _gpsSensor;
+    
+    // Данные батареи
+    double _batteryVoltage;
+    double _batteryCurrent;
+    double _batteryCapacity;
+    uint8_t _batteryRemaining;
+    
+    // Данные положения
+    double _attitudeRoll;
+    double _attitudePitch;
+    double _attitudeYaw;
     uint32_t _baud;
     uint32_t _lastChannelsPacket;
     bool _linkIsUp;
