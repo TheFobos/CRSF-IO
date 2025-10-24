@@ -133,12 +133,12 @@ static void crsfLinkDown()
 
 void crsfSetChannel(unsigned int ch, int value)
 {
-  crsf_1.setChannel(ch, value);
+  crsf->setChannel(ch, value); // Используем указатель на активный порт
 }
 
 void crsfSendChannels()
 {
-  crsf_1.packetChannelsSend();
+  crsf->packetChannelsSend(); // Используем указатель на активный порт
 }
 
 void loop_ch()
