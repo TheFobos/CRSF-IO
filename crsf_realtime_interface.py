@@ -95,7 +95,7 @@ class CRSFRealtimeInterface:
         ttk.Label(control_frame, text="Режим:").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
         self.mode_var = tk.StringVar(value="joystick")
         mode_combo = ttk.Combobox(control_frame, textvariable=self.mode_var, 
-                                 values=["joystick", "manual", "auto"], width=15)
+                                 values=["joystick", "manual"], width=15)
         mode_combo.grid(row=1, column=1, padx=(5, 10), pady=(10, 0))
         
         mode_button = ttk.Button(control_frame, text="Установить режим", command=self.set_mode)
@@ -387,13 +387,6 @@ class CRSFRealtimeInterface:
         
         # Режим работы
         self.work_mode_label.config(text=data.get('workMode', 'Неизвестно'))
-        
-        # Авто режим
-        auto_mode = data.get('autoMode', False)
-        self.auto_mode_label.config(text="Включен" if auto_mode else "Выключен")
-        
-        # Авто шаг
-        self.auto_step_label.config(text=str(data.get('autoStep', 0)))
         
         # Каналы
         channels = data.get('channels', [])

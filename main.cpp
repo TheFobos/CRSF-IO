@@ -71,17 +71,20 @@ int main() {
       return ius;
     };
 
-    // Обработка осей джойстика с проверкой доступности
-    int16_t ax0 = 0, ax1 = 0, ax2 = 0, ax3 = 0;
-    bool axis0_ok = js_get_axis(0, ax0);
-    bool axis1_ok = js_get_axis(1, ax1);
-    bool axis2_ok = js_get_axis(2, ax2);
-    bool axis3_ok = js_get_axis(3, ax3);
-    
-    if (axis0_ok) crsfSetChannel(1, axisToUs(ax0)); // Roll
-    if (axis1_ok) crsfSetChannel(2, axisToUs(ax1)); // Pitch
-    if (axis2_ok) crsfSetChannel(3, axisToUs(ax2)); // Throttle
-    if (axis3_ok) crsfSetChannel(4, axisToUs(ax3)); // Yaw
+    // Обработка осей джойстика только в режиме joystick
+    std::string mode = getWorkMode();
+    if (mode == "joystick") {
+      int16_t ax0 = 0, ax1 = 0, ax2 = 0, ax3 = 0;
+      bool axis0_ok = js_get_axis(0, ax0);
+      bool axis1_ok = js_get_axis(1, ax1);
+      bool axis2_ok = js_get_axis(2, ax2);
+      bool axis3_ok = js_get_axis(3, ax3);
+      
+      if (axis0_ok) crsfSetChannel(1, axisToUs(ax0)); // Roll
+      if (axis1_ok) crsfSetChannel(2, axisToUs(ax1)); // Pitch
+      if (axis2_ok) crsfSetChannel(3, axisToUs(ax2)); // Throttle
+      if (axis3_ok) crsfSetChannel(4, axisToUs(ax3)); // Yaw
+    }
 
     // Отправляем RC-каналы с частотой ~100 Гц для реалтайма
     if (currentMillis - lastSendMs >= crsfSendPeriodMs) {

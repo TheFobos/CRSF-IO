@@ -46,11 +46,7 @@ struct TelemetryData {
     double yaw = 0.0;
     
     // Режим работы
-    std::string workMode = "joystick"; // joystick, manual, auto
-    bool autoMode = false;
-    int autoStep = 100; // шаг для автоматического режима
-    int autoInterval = 1000; // интервал в мс
-    uint32_t lastAutoSend = 0;
+    std::string workMode = "joystick"; // joystick, manual
     
     std::string timestamp;
 };
@@ -58,6 +54,12 @@ struct TelemetryData {
 static TelemetryData telemetryData;
 static std::mutex telemetryMutex;
 static CrsfSerial* crsfInstance = nullptr;
+
+// Функция для получения текущего режима работы
+std::string getWorkMode() {
+    std::lock_guard<std::mutex> lock(telemetryMutex);
+    return telemetryData.workMode;
+}
 
 // Функция для получения текущего времени
 std::string getCurrentTime() {
@@ -189,10 +191,7 @@ std::string createTelemetryJson() {
     json << "},";
     
     // Режим работы
-    json << "\"workMode\":\"" << telemetryData.workMode << "\",";
-    json << "\"autoMode\":" << (telemetryData.autoMode ? "true" : "false") << ",";
-    json << "\"autoStep\":" << telemetryData.autoStep << ",";
-    json << "\"autoInterval\":" << telemetryData.autoInterval;
+    json << "\"workMode\":\"" << telemetryData.workMode << "\"";
     
     json << "}";
     return json.str();
@@ -203,19 +202,9 @@ void handleCommand(const std::string& command, const std::string& value) {
     std::lock_guard<std::mutex> lock(telemetryMutex);
     
     if (command == "setMode") {
-        if (value == "joystick" || value == "manual" || value == "auto") {
+        if (value == "joystick" || value == "manual") {
             telemetryData.workMode = value;
-            telemetryData.autoMode = (value == "auto");
-        }
-    } else if (command == "setAutoStep") {
-        int step = std::stoi(value);
-        if (step > 0 && step <= 1000) {
-            telemetryData.autoStep = step;
-        }
-    } else if (command == "setAutoInterval") {
-        int interval = std::stoi(value);
-        if (interval >= 100 && interval <= 10000) {
-            telemetryData.autoInterval = interval;
+            std::cout << "🔧 Режим изменен на: " << value << std::endl;
         }
     } else if (command == "setChannel") {
         // Формат: channel=value (например: 1=1500)
@@ -226,6 +215,7 @@ void handleCommand(const std::string& command, const std::string& value) {
             if (channel >= 1 && channel <= 16 && val >= 1000 && val <= 2000) {
                 if (crsfInstance) {
                     crsfInstance->setChannel(channel, val);
+                    std::cout << "🎮 Канал " << channel << " установлен в " << val << " мкс" << std::endl;
                 }
             }
         }

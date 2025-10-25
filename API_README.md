@@ -55,10 +55,7 @@ sudo ./crsf_io_rpi
     "pitch": 14.90,
     "yaw": 317.67
   },
-  "workMode": "joystick",
-  "autoMode": false,
-  "autoStep": 100,
-  "autoInterval": 1000
+  "workMode": "joystick"
 }
 ```
 
@@ -76,68 +73,68 @@ sudo ./crsf_io_rpi
 
 #### Установка режима работы
 ```bash
-curl "http://localhost:8080/api/command?cmd=setMode&value=joystick"
-curl "http://localhost:8080/api/command?cmd=setMode&value=manual"
-curl "http://localhost:8080/api/command?cmd=setMode&value=auto"
+curl "http://localhost:8081/api/command?cmd=setMode&value=joystick"
+curl "http://localhost:8081/api/command?cmd=setMode&value=manual"
 ```
 
-#### Установка канала
+#### Установка канала (только в ручном режиме)
 ```bash
-curl "http://localhost:8080/api/command?cmd=setChannel&value=1=1500"
-curl "http://localhost:8080/api/command?cmd=setChannel&value=2=2000"
-```
-
-#### Настройка автоматического режима
-```bash
-curl "http://localhost:8080/api/command?cmd=setAutoStep&value=100"
-curl "http://localhost:8080/api/command?cmd=setAutoInterval&value=1000"
+curl "http://localhost:8081/api/command?cmd=setChannel&value=1=1500"
+curl "http://localhost:8081/api/command?cmd=setChannel&value=2=2000"
+curl "http://localhost:8081/api/command?cmd=setChannel&value=3=1000"
+curl "http://localhost:8081/api/command?cmd=setChannel&value=4=1800"
 ```
 
 ## Режимы работы
 
-### 1. joystick - Передача джойстика
+### 1. joystick - Передача джойстика (по умолчанию)
 - Автоматическая передача данных с джойстика
 - 4 оси: Roll, Pitch, Throttle, Yaw
 - Преобразование в CRSF формат (1000-2000 мкс)
+- Джойстик опрашивается с частотой ~100 Гц
 
 ### 2. manual - Ручная установка
 - Установка значений каналов вручную через API
-- Выбор канала (1-16) и значения (1000-2000)
-
-### 3. auto - Автоматическая отправка
-- Автоматическая отправка значений с заданным шагом
-- Настраиваемый интервал времени (100-10000 мс)
+- Выбор канала (1-16) и значения (1000-2000 мкс)
+- Каналы сохраняются до следующего изменения
+- Отправка с частотой ~100 Гц
 
 ## Примеры использования
 
 ### Получение телеметрии
 ```bash
 # Получить данные телеметрии
-curl http://localhost:8080/api/telemetry
+curl http://localhost:8081/api/telemetry
 
 # Сохранить в файл
-curl http://localhost:8080/api/telemetry > telemetry.json
+curl http://localhost:8081/api/telemetry > telemetry.json
 ```
 
-### Управление каналами
+### Управление каналами в ручном режиме
 ```bash
-# Установить канал 1 в 1500 мкс
-curl "http://localhost:8080/api/command?cmd=setChannel&value=1=1500"
+# Сначала переключаемся в ручной режим
+curl "http://localhost:8081/api/command?cmd=setMode&value=manual"
 
-# Установить канал 2 в 2000 мкс
-curl "http://localhost:8080/api/command?cmd=setChannel&value=2=2000"
+# Установить канал 1 (Roll) в 1500 мкс
+curl "http://localhost:8081/api/command?cmd=setChannel&value=1=1500"
+
+# Установить канал 2 (Pitch) в 2000 мкс
+curl "http://localhost:8081/api/command?cmd=setChannel&value=2=2000"
+
+# Установить канал 3 (Throttle) в 1000 мкс
+curl "http://localhost:8081/api/command?cmd=setChannel&value=3=1000"
+
+# Установить канал 4 (Yaw) в 1800 мкс
+curl "http://localhost:8081/api/command?cmd=setChannel&value=4=1800"
 ```
 
 ### Переключение режимов
 ```bash
 # Включить режим джойстика
-curl "http://localhost:8080/api/command?cmd=setMode&value=joystick"
+curl "http://localhost:8081/api/command?cmd=setMode&value=joystick"
 
 # Включить ручной режим
-curl "http://localhost:8080/api/command?cmd=setMode&value=manual"
-
-# Включить автоматический режим
-curl "http://localhost:8080/api/command?cmd=setMode&value=auto"
+curl "http://localhost:8081/api/command?cmd=setMode&value=manual"
 ```
 
 ## Тестирование
@@ -149,15 +146,21 @@ python3 test_api.py
 
 Проверьте API:
 ```bash
-curl http://localhost:8080/api/telemetry
-curl "http://localhost:8080/api/command?cmd=setMode&value=manual"
+curl http://localhost:8081/api/telemetry
+curl "http://localhost:8081/api/command?cmd=setMode&value=manual"
 ```
 
 ## Порт
 
-По умолчанию: **8080**
+По умолчанию: **8081**
 
 Можно изменить в коде:
 ```cpp
-startTelemetryServer((CrsfSerial*)crsfGetActive(), 8080); // изменить порт
+startTelemetryServer((CrsfSerial*)crsfGetActive(), 8081, 10); // порт, интервал обновления (мс)
 ```
+
+## Частота обновления
+
+- **Телеметрия**: 100 Гц (10 мс)
+- **Отправка RC каналов**: 100 Гц (10 мс)
+- **Опрос джойстика**: ~100 Гц
