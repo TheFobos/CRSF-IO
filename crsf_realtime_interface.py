@@ -64,8 +64,8 @@ class CRSFRealtimeInterface:
         # Панель каналов
         self.create_channels_panel(main_frame)
         
-        # Панель телеметрии
-        self.create_telemetry_panel(main_frame)
+        # Ноутбук с вкладками для телеметрии
+        self.create_telemetry_notebook(main_frame)
     
     def create_control_panel(self, parent):
         """Панель управления"""
@@ -173,8 +173,8 @@ class CRSFRealtimeInterface:
             label.grid(row=row, column=col+2, sticky=tk.W)
             self.channel_labels.append(label)
     
-    def create_telemetry_panel(self, parent):
-        """Панель телеметрии"""
+    def create_telemetry_notebook(self, parent):
+        """Панель телеметрии с ноутбуком"""
         telemetry_frame = ttk.LabelFrame(parent, text="Телеметрия", padding="10")
         telemetry_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
         
@@ -203,6 +203,11 @@ class CRSFRealtimeInterface:
         attitude_frame = ttk.Frame(notebook)
         notebook.add(attitude_frame, text="Положение")
         self.create_attitude_tab(attitude_frame)
+        
+        # Вкладка Сырые данные
+        raw_frame = ttk.Frame(notebook)
+        notebook.add(raw_frame, text="Сырые данные")
+        self.create_raw_data_tab(raw_frame)
     
     def create_gps_tab(self, parent):
         """Вкладка GPS"""
@@ -281,6 +286,50 @@ class CRSFRealtimeInterface:
         ttk.Label(parent, text="Yaw:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=5)
         self.yaw_bar = ttk.Progressbar(parent, length=200, mode='determinate')
         self.yaw_bar.grid(row=5, column=1, padx=10, pady=5)
+    
+    def create_raw_data_tab(self, parent):
+        """Вкладка Сырые данные Attitude"""
+        # Заголовок
+        title_label = ttk.Label(parent, text="Сырые значения ATTITUDE из CRSF", 
+                               font=('Arial', 12, 'bold'))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(10, 20))
+        
+        # Roll Raw
+        ttk.Label(parent, text="Roll Raw (int16_t):").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
+        self.roll_raw_label = ttk.Label(parent, text="0", font=('Arial', 10, 'bold'), 
+                                       foreground='#00ff00')
+        self.roll_raw_label.grid(row=1, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # Pitch Raw
+        ttk.Label(parent, text="Pitch Raw (int16_t):").grid(row=2, column=0, sticky=tk.W, padx=10, pady=5)
+        self.pitch_raw_label = ttk.Label(parent, text="0", font=('Arial', 10, 'bold'), 
+                                        foreground='#00ff00')
+        self.pitch_raw_label.grid(row=2, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # Yaw Raw
+        ttk.Label(parent, text="Yaw Raw (int16_t):").grid(row=3, column=0, sticky=tk.W, padx=10, pady=5)
+        self.yaw_raw_label = ttk.Label(parent, text="0", font=('Arial', 10, 'bold'), 
+                                      foreground='#00ff00')
+        self.yaw_raw_label.grid(row=3, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # Разделитель
+        ttk.Separator(parent, orient='horizontal').grid(row=4, column=0, columnspan=2, 
+                                                       sticky=(tk.W, tk.E), pady=20)
+        
+        # Информационный блок
+        info_text = """Сырые значения ATTITUDE - это int16_t значения, полученные 
+из CRSF пакета CRSF_FRAMETYPE_ATTITUDE (0x1E).
+
+Формат: 6 байт (3 × int16_t, big-endian)
+- bytes 0-1: Roll raw value
+- bytes 2-3: Pitch raw value  
+- bytes 4-5: Yaw raw value
+
+Эти значения используются для расчета углов в градусах."""
+        
+        info_label = ttk.Label(parent, text=info_text, justify=tk.LEFT, 
+                              font=('Arial', 9))
+        info_label.grid(row=5, column=0, columnspan=2, padx=10, pady=10, sticky=tk.W)
     
     def start_monitoring(self):
         """Запуск мониторинга"""
@@ -446,6 +495,17 @@ class CRSFRealtimeInterface:
             # Yaw: 0 до 360 -> 0 до 100
             yaw_progress = (yaw / 360) * 100
             self.yaw_bar.config(value=yaw_progress)
+        
+        # Сырые значения attitude
+        attitude_raw = data.get('attitudeRaw', {})
+        if attitude_raw:
+            roll_raw = attitude_raw.get('roll', 0)
+            pitch_raw = attitude_raw.get('pitch', 0)
+            yaw_raw = attitude_raw.get('yaw', 0)
+            
+            self.roll_raw_label.config(text=str(roll_raw))
+            self.pitch_raw_label.config(text=str(pitch_raw))
+            self.yaw_raw_label.config(text=str(yaw_raw))
 
 def main():
     """Главная функция"""

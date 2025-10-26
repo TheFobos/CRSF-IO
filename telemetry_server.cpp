@@ -45,6 +45,9 @@ struct TelemetryData {
     double pitch = 0.0;
     double yaw = 0.0;
     
+    // Сырые значения attitude (raw bytes)
+    int16_t rawAttitudeBytes[3] = {0};  // [0]=roll, [1]=pitch, [2]=yaw
+    
     // Режим работы
     std::string workMode = "joystick"; // joystick, manual
     
@@ -117,6 +120,11 @@ void updateTelemetry() {
         telemetryData.roll = crsfInstance->getAttitudeRoll();
         telemetryData.pitch = crsfInstance->getAttitudePitch();
         telemetryData.yaw = crsfInstance->getAttitudeYaw();
+        
+        // Получаем сырые значения attitude
+        telemetryData.rawAttitudeBytes[0] = crsfInstance->getRawAttitudeRoll();
+        telemetryData.rawAttitudeBytes[1] = crsfInstance->getRawAttitudePitch();
+        telemetryData.rawAttitudeBytes[2] = crsfInstance->getRawAttitudeYaw();
     }
     
     telemetryData.timestamp = getCurrentTime();
@@ -188,6 +196,13 @@ std::string createTelemetryJson() {
     json << "\"roll\":" << telemetryData.roll << ",";
     json << "\"pitch\":" << telemetryData.pitch << ",";
     json << "\"yaw\":" << telemetryData.yaw;
+    json << "},";
+    
+    // Сырые значения attitude (raw CRSF bytes)
+    json << "\"attitudeRaw\":{";
+    json << "\"roll\":" << telemetryData.rawAttitudeBytes[0] << ",";
+    json << "\"pitch\":" << telemetryData.rawAttitudeBytes[1] << ",";
+    json << "\"yaw\":" << telemetryData.rawAttitudeBytes[2];
     json << "},";
     
     // Режим работы

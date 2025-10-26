@@ -15,7 +15,7 @@ class CrsfSerial
 public:
 // Packet timeout where buffer is flushed if no data is received in this time
 static const unsigned int CRSF_PACKET_TIMEOUT_MS = 100;
-static const unsigned int CRSF_FAILSAFE_STAGE1_MS = 60000;
+static const unsigned int CRSF_FAILSAFE_STAGE1_MS = 120000;  // 2 минуты вместо 60 секунд для стабильной работы
 uint32_t _lastReceive; // время последнего приёма (мс), rpi_millis()
 
 // Конструктор: принимает ссылку на SerialPort и скорость
@@ -49,6 +49,13 @@ void setChannel(unsigned int ch, int value)
     double getAttitudeRoll() const { return _attitudeRoll; }
     double getAttitudePitch() const { return _attitudePitch; }
     double getAttitudeYaw() const { return _attitudeYaw; }
+    
+    // Методы для получения сырых значений attitude
+    // ВНИМАНИЕ: _rawAttitudeBytes[0]=Pitch, [1]=Roll, [2]=Yaw (поменяны местами!)
+    int16_t getRawAttitudeRoll() const { return _rawAttitudeBytes[1]; }   // bytes 2-3
+    int16_t getRawAttitudePitch() const { return _rawAttitudeBytes[0]; }  // bytes 0-1
+    int16_t getRawAttitudeYaw() const { return _rawAttitudeBytes[2]; }
+    
     bool isLinkUp() const { return _linkIsUp; }
     bool getPassthroughMode() const { return _passthroughMode; }
     void setPassthroughMode(bool val, unsigned int baud = 0);
@@ -83,6 +90,10 @@ private:
     double _attitudeRoll;
     double _attitudePitch;
     double _attitudeYaw;
+    
+    // Сырые значения attitude (raw int16_t из CRSF пакета)
+    int16_t _rawAttitudeBytes[3];  // [0]=pitch, [1]=roll, [2]=yaw (порядок изменен!)
+    
     uint32_t _baud;
     uint32_t _lastChannelsPacket;
     bool _linkIsUp;

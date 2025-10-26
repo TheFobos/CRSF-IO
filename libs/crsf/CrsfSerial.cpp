@@ -41,7 +41,8 @@ CrsfSerial::CrsfSerial(SerialPort& port, uint32_t baud) :
     _lastReceive(0), _lastChannelsPacket(0), _linkIsUp(false),
     _passthroughMode(false),
     _batteryVoltage(0.0), _batteryCurrent(0.0), _batteryCapacity(0.0), _batteryRemaining(0),
-    _attitudeRoll(0.0), _attitudePitch(0.0), _attitudeYaw(0.0)
+    _attitudeRoll(0.0), _attitudePitch(0.0), _attitudeYaw(0.0),
+    _rawAttitudeBytes{0, 0, 0}
 {
     // Ничего дополнительно не делаем: открытие и настройка порта снаружи
 }
@@ -123,7 +124,8 @@ void CrsfSerial::checkPacketTimeout()
 
 void CrsfSerial::checkLinkDown()
 {
-    if (_linkIsUp && rpi_millis() - _lastChannelsPacket > CRSF_FAILSAFE_STAGE1_MS) {
+    // Проверяем общее время последнего получения ЛЮБЫХ данных, а не только RC-каналов
+    if (_linkIsUp && rpi_millis() - _lastReceive > CRSF_FAILSAFE_STAGE1_MS) {
         if (onLinkDown)
             onLinkDown();
         _linkIsUp = false;
@@ -360,23 +362,38 @@ void CrsfSerial::packetChannelsSend()
 void CrsfSerial::packetAttitude(const crsf_header_t* p)
 {
     if (p->frame_size >= 6) {
-        int16_t pitch = be16toh(*(int16_t*)&p->data[0]);
-        int16_t roll = be16toh(*(int16_t*)&p->data[2]);
-        int16_t yaw = be16toh(*(int16_t*)&p->data[4]);
-
-        // Убираем избыточные логи для реалтайма (замедляют отображение)
-        // log_info("RAW ATTITUDE: P=" + std::to_string(pitch) + 
-        //          " R=" + std::to_string(roll) + 
-        //          " Y=" + std::to_string(yaw));
-
-        // log_info("ATTITUDE: Pitch=" + std::to_string(pitch/100.0f) + 
-        //         "° Roll=" + std::to_string(roll/100.0f) + 
-        //         "° Yaw=" + std::to_string(yaw/100.0f) + "°");
+        // Читаем 6 байт ATTITUDE пакета
+        int16_t rawVal0 = be16toh(*(int16_t*)&p->data[0]);
+        int16_t rawVal2 = be16toh(*(int16_t*)&p->data[2]);
+        int16_t rawVal4 = be16toh(*(int16_t*)&p->data[4]);
         
-        // Сохраняем данные положения
-        _attitudePitch = pitch / 100.0; // Конвертируем в градусы
-        _attitudeRoll = roll / 100.0;
-        _attitudeYaw = yaw / 100.0;
+        // ВНИМАНИЕ: Эти коэффициенты получены экспериментально и могут различаться 
+        // в зависимости от версии прошивки полетного контроллера (Betaflight/iNAV).
+        // Стандартная спецификация CRSF: градусы × 100, но данные не соответствуют.
+        
+        // bytes 0-1 = Pitch, bytes 2-3 = Roll (поменяны местами!)
+        // Сохраняем сырые значения (raw int16_t)
+        _rawAttitudeBytes[0] = rawVal0;  // Pitch raw
+        _rawAttitudeBytes[1] = rawVal2;  // Roll raw
+        _rawAttitudeBytes[2] = rawVal4;  // Yaw raw
+        
+        // КОНВЕРТАЦИЯ С ПРАВИЛЬНЫМ ПОРЯДКОМ
+        _attitudeRoll = rawVal2 / 175.0;    // bytes 2-3 = Roll
+        _attitudePitch = rawVal0 / 175.0;   // bytes 0-1 = Pitch
+        
+        // Yaw: конвертация с нормализацией к диапазону 0-360 градусов
+        double yawDegrees = rawVal4 / 175.0;
+        
+        // Нормализация yaw к диапазону 0-360°
+        while (yawDegrees < 0) yawDegrees += 360.0;
+        while (yawDegrees >= 360.0) yawDegrees -= 360.0;
+        
+        _attitudeYaw = yawDegrees;
+        
+        // Логирование для отладки yaw
+        log_info("YAW: raw=" + std::to_string(rawVal4) + 
+                 " /175.0=" + std::to_string(rawVal4 / 175.0) + 
+                 " → normalized=" + std::to_string(_attitudeYaw));
     }
 }
 

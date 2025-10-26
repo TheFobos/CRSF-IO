@@ -11,7 +11,7 @@ static SerialPort crsfPort2(CRSF_PORT_SECONDARY, CRSF_BAUD);
 static CrsfSerial crsf_1(crsfPort1, CRSF_BAUD);
 static CrsfSerial crsf_2(crsfPort2, CRSF_BAUD);
 static CrsfSerial *crsf = &crsf_1;
-static uint32_t lastPortSwitchTime = 0; // Время последнего переключения порта
+// static uint32_t lastPortSwitchTime = 0; // Время последнего переключения порта - отключено
 
 #if PIN_INIT == true
 uint32_t old_time_rele1 = 0;
@@ -166,10 +166,11 @@ void loop_ch()
       #endif
   }
 
-  // ПРОВЕРКА ДЛЯ ПЕРЕКЛЮЧЕНИЯ ПОРТОВ
+  // ОТКЛЮЧЕНО: ПЕРЕКЛЮЧЕНИЕ ПОРТОВ
   // Если от полетника не было НИКАКИХ данных более 30 секунд (30000 мс)
   // И если связь вообще когда-либо была (_lastReceive != 0)
   // И прошло не менее 5 секунд с последнего переключения (стабилизация)
+  /*
   if ((crsf->_lastReceive != 0) && (newTime - crsf->_lastReceive > 30000) && 
       (newTime - lastPortSwitchTime > 5000))
   {
@@ -183,6 +184,7 @@ void loop_ch()
         crsfLinkDown_2(); // Переключаемся на порт 1
       }
   }
+  */
 
   #if PIN_INIT == true
   if (old_time_rele1 > 0)
