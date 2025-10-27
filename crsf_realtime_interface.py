@@ -208,6 +208,11 @@ class CRSFRealtimeInterface:
         raw_frame = ttk.Frame(notebook)
         notebook.add(raw_frame, text="Сырые данные")
         self.create_raw_data_tab(raw_frame)
+        
+        # Вкладка Ручное управление
+        manual_frame = ttk.Frame(notebook)
+        notebook.add(manual_frame, text="Ручное управление")
+        self.create_manual_control_tab(manual_frame)
     
     def create_gps_tab(self, parent):
         """Вкладка GPS"""
@@ -330,6 +335,194 @@ class CRSFRealtimeInterface:
         info_label = ttk.Label(parent, text=info_text, justify=tk.LEFT, 
                               font=('Arial', 9))
         info_label.grid(row=5, column=0, columnspan=2, padx=10, pady=10, sticky=tk.W)
+    
+    def create_manual_control_tab(self, parent):
+        """Вкладка ручного управления каналами"""
+        # Создаем scrollable frame для большого количества элементов
+        canvas = tk.Canvas(parent, bg='#2b2b2b')
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Настройка растягивания
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        
+        # Заголовок
+        title_label = ttk.Label(scrollable_frame, text="Ручное управление каналами", 
+                               font=('Arial', 12, 'bold'))
+        title_label.grid(row=0, column=0, columnspan=4, pady=(10, 20))
+        
+        # Предупреждение о режиме
+        warning_label = ttk.Label(scrollable_frame, 
+                                 text="⚠ Для управления каналами переключитесь в ручной режим",
+                                 foreground='orange', font=('Arial', 10, 'bold'))
+        warning_label.grid(row=1, column=0, columnspan=4, pady=(0, 10))
+        
+        # Глобальные кнопки
+        button_frame = ttk.Frame(scrollable_frame)
+        button_frame.grid(row=2, column=0, columnspan=4, pady=(0, 20))
+        
+        all_center_button = ttk.Button(button_frame, text="Все в центр (1500)", 
+                                       command=self.set_all_center)
+        all_center_button.grid(row=0, column=0, padx=5)
+        
+        all_min_button = ttk.Button(button_frame, text="Все минимум (1000)", 
+                                    command=self.set_all_min)
+        all_min_button.grid(row=0, column=1, padx=5)
+        
+        all_max_button = ttk.Button(button_frame, text="Все максимум (2000)", 
+                                    command=self.set_all_max)
+        all_max_button.grid(row=0, column=2, padx=5)
+        
+        apply_all_button = ttk.Button(button_frame, text="Применить все", 
+                                      command=self.apply_all_channels)
+        apply_all_button.grid(row=0, column=3, padx=5)
+        
+        # Сохраняем элементы управления каналами
+        self.manual_channel_vars = []
+        self.manual_channel_scales = []
+        self.manual_channel_entries = []
+        
+        # Заголовки колонок
+        col_labels = ["Канал", "Значение", "Ползунок", "Действия"]
+        for i, label in enumerate(col_labels):
+            ttk.Label(scrollable_frame, text=label, font=('Arial', 10, 'bold')).grid(
+                row=3, column=i, padx=5, pady=5)
+        
+        # Создаем управление для каждого канала
+        for ch_num in range(16):
+            row = ch_num + 4
+            
+            # Номер канала
+            ch_name = self.get_channel_name(ch_num + 1)
+            label = ttk.Label(scrollable_frame, text=f"CH{ch_num+1} ({ch_name})", width=20)
+            label.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+            
+            # Поле ввода значения
+            var = tk.StringVar(value="1500")
+            entry = ttk.Entry(scrollable_frame, textvariable=var, width=8)
+            entry.grid(row=row, column=1, padx=5, pady=2)
+            self.manual_channel_vars.append(var)
+            self.manual_channel_entries.append(entry)
+            
+            # Ползунок
+            scale_var = tk.DoubleVar(value=1500.0)
+            scale = ttk.Scale(scrollable_frame, from_=1000, to=2000, 
+                             variable=scale_var, orient=tk.HORIZONTAL, length=300)
+            scale.grid(row=row, column=2, padx=5, pady=2, sticky=(tk.W, tk.E))
+            self.manual_channel_scales.append(scale)
+            
+            # Синхронизация ползунка и поля ввода
+            def make_sync_handler(idx):
+                def sync_to_entry(val):
+                    if idx < len(self.manual_channel_vars):
+                        self.manual_channel_vars[idx].set(f"{float(val):.0f}")
+                return sync_to_entry
+            
+            def make_entry_handler(idx):
+                def sync_to_scale(*args):
+                    if idx < len(self.manual_channel_scales):
+                        try:
+                            val = int(self.manual_channel_vars[idx].get())
+                            if 1000 <= val <= 2000:
+                                self.manual_channel_scales[idx].set(val)
+                        except ValueError:
+                            pass
+                return sync_to_scale
+            
+            scale.configure(command=make_sync_handler(ch_num))
+            var.trace('w', make_entry_handler(ch_num))
+            
+            # Кнопки действий
+            action_frame = ttk.Frame(scrollable_frame)
+            action_frame.grid(row=row, column=3, padx=5, pady=2)
+            
+            center_button = ttk.Button(action_frame, text="Центр", width=8,
+                                      command=lambda ch=ch_num+1, var=var, scale=scale: self.set_channel_center(ch, var, scale))
+            center_button.grid(row=0, column=0, padx=2)
+            
+            apply_button = ttk.Button(action_frame, text="Применить", width=8,
+                                     command=lambda ch=ch_num+1, var=var: self.apply_channel(ch, var))
+            apply_button.grid(row=0, column=1, padx=2)
+        
+        # Обновляем размеры scrollable_frame
+        scrollable_frame.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox("all"))
+    
+    def get_channel_name(self, ch_num):
+        """Получить имя канала по номеру"""
+        names = {
+            1: "Roll", 2: "Pitch", 3: "Throttle", 4: "Yaw",
+            5: "Aux1", 6: "Aux2", 7: "Aux3", 8: "Aux4",
+            9: "Aux5", 10: "Aux6", 11: "Aux7", 12: "Aux8",
+            13: "Aux9", 14: "Aux10", 15: "Aux11", 16: "Aux12"
+        }
+        return names.get(ch_num, f"Aux{ch_num-4}")
+    
+    def set_channel_center(self, ch_num, var, scale):
+        """Установить канал в центр"""
+        var.set("1500")
+        scale.set(1500.0)
+    
+    def apply_channel(self, ch_num, var):
+        """Применить значение канала"""
+        try:
+            value = int(var.get())
+            if 1000 <= value <= 2000:
+                self.send_channel_command(ch_num, value)
+            else:
+                messagebox.showerror("Ошибка", f"Значение должно быть от 1000 до 2000")
+                var.set("1500")
+        except ValueError:
+            messagebox.showerror("Ошибка", "Неверное значение канала")
+            var.set("1500")
+    
+    def set_all_center(self):
+        """Установить все каналы в центр"""
+        for var, scale in zip(self.manual_channel_vars, self.manual_channel_scales):
+            var.set("1500")
+            scale.set(1500.0)
+    
+    def set_all_min(self):
+        """Установить все каналы в минимум"""
+        for var, scale in zip(self.manual_channel_vars, self.manual_channel_scales):
+            var.set("1000")
+            scale.set(1000.0)
+    
+    def set_all_max(self):
+        """Установить все каналы в максимум"""
+        for var, scale in zip(self.manual_channel_vars, self.manual_channel_scales):
+            var.set("2000")
+            scale.set(2000.0)
+    
+    def apply_all_channels(self):
+        """Применить все каналы"""
+        for ch_num in range(16):
+            var = self.manual_channel_vars[ch_num]
+            try:
+                value = int(var.get())
+                if 1000 <= value <= 2000:
+                    self.send_channel_command(ch_num + 1, value)
+                    time.sleep(0.01)  # Небольшая задержка между командами
+            except ValueError:
+                messagebox.showerror("Ошибка", f"Неверное значение для канала {ch_num + 1}")
+                return
+    
+    def send_channel_command(self, ch_num, value):
+        """Отправить команду установки канала через API"""
+        try:
+            url = f"{self.api_url}/api/command?cmd=setChannel&value={ch_num}={value}"
+            response = requests.get(url, timeout=2)
+            if response.status_code != 200:
+                messagebox.showerror("Ошибка", f"Не удалось установить канал {ch_num}: {response.status_code}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка отправки команды: {e}")
     
     def start_monitoring(self):
         """Запуск мониторинга"""

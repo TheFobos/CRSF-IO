@@ -117,19 +117,16 @@ static void crsfLinkUp()
 {
   // Загорается индикатор связи: опустим GPIO LED_BUILTIN
   rpi_gpio_write(LED_BUILTIN, false);
-  log_info("CRSF: Link UP");
 }
 
 static void crsfLinkDown_2()
 {
   crsf = &crsf_1;
-  log_warn("CRSF: переключение на основной порт");
 }
 
 static void crsfLinkDown()
 {
   crsf = &crsf_2;
-  log_warn("CRSF: переключение на резервный порт");
 }
 
 void crsfSetChannel(unsigned int ch, int value)
@@ -223,7 +220,6 @@ void PWMinit()
   rpi_pwm_set_duty_us({PWM_CHIP_M2, PWM_NUM_M2}, 1500);
   rpi_pwm_enable({PWM_CHIP_M1, PWM_NUM_M1}, true);
   rpi_pwm_enable({PWM_CHIP_M2, PWM_NUM_M2}, true);
-  log_info("PWM: инициализировано 50 Гц, старт 1500 мкс на обоих каналах");
 }
 
 void analogInit()
@@ -244,7 +240,6 @@ void pinInit()
   rpi_gpio_write(camera, false);
   rpi_gpio_write(rele_2, false);
   rpi_gpio_write(rele_1, false);
-  log_info("Пины: камера/реле инициализированы (LOW)");
 }
 
 void crsfInitRecv()
@@ -252,8 +247,6 @@ void crsfInitRecv()
   // Открываем последовательные порты для CRSF
   crsfPort1.open();
   crsfPort2.open();
-  log_info(std::string("UART1: ") + (crsfPort1.isOpen() ? "OK" : "FAIL"));
-  log_info(std::string("UART2: ") + (crsfPort2.isOpen() ? "OK" : "FAIL"));
   crsf_2.onPacketChannels = &packetChannels;
   crsf_2.onLinkUp = &crsfLinkUp;
   crsf_2.onLinkDown = &crsfLinkDown_2;
@@ -264,7 +257,6 @@ void crsfInitRecv()
   // Если основной порт не открылся — переключаемся на вторичный
   if (!crsfPort1.isOpen() && crsfPort2.isOpen()) {
     crsf = &crsf_2;
-    log_warn("CRSF: основной порт недоступен, используем резервный");
   }
 }
 

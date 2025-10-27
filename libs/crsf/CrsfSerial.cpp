@@ -157,9 +157,8 @@ void CrsfSerial::processPacketIn(uint8_t len)
             packetBatterySensor(hdr);
             break;
         default:
-            // Логируем неизвестные типы пакетов для отладки
-            log_info("CRSF: получен пакет типа " + std::to_string(hdr->type) + " от полетного контроллера");
-            break;
+        // Неизвестный тип пакета
+        break;
         }
     } // CRSF_ADDRESS_FLIGHT_CONTROLLER
 }
@@ -222,7 +221,6 @@ void CrsfSerial::packetChannelsPacked(const crsf_header_t* p)
 
     if (onPacketChannels)
         onPacketChannels();
-    log_info("CRSF: получены RC-каналы");
 }
 
 void CrsfSerial::packetLinkStatistics(const crsf_header_t* p)
@@ -232,7 +230,6 @@ void CrsfSerial::packetLinkStatistics(const crsf_header_t* p)
 
     if (onPacketLinkStatistics)
         onPacketLinkStatistics(&_linkStatistics);
-    log_info("CRSF: статистика линка обновлена");
 }
 
 void CrsfSerial::packetGps(const crsf_header_t* p)
@@ -389,11 +386,6 @@ void CrsfSerial::packetAttitude(const crsf_header_t* p)
         while (yawDegrees >= 360.0) yawDegrees -= 360.0;
         
         _attitudeYaw = yawDegrees;
-        
-        // Логирование для отладки yaw
-        log_info("YAW: raw=" + std::to_string(rawVal4) + 
-                 " /175.0=" + std::to_string(rawVal4 / 175.0) + 
-                 " → normalized=" + std::to_string(_attitudeYaw));
     }
 }
 
@@ -402,8 +394,6 @@ void CrsfSerial::packetFlightMode(const crsf_header_t* p)
     // FLIGHT_MODE пакет содержит строку с режимом полета
     if (p->frame_size > 0) {
         std::string flightMode((char*)p->data, p->frame_size - 1); // -1 для CRC
-        log_info("FLIGHT_MODE: " + flightMode);
-        
         // Данные телеметрии будут обновлены через веб-сервер
     }
 }
@@ -417,11 +407,6 @@ void CrsfSerial::packetBatterySensor(const crsf_header_t* p)
         // Читаем 24-битное значение емкости
         uint32_t capacity = (p->data[4] << 16) | (p->data[5] << 8) | p->data[6]; // мАч
         uint8_t remaining = p->data[7]; // %
-        
-        log_info("BATTERY: " + std::to_string(voltage/100.0f) + "V " + 
-                std::to_string(current) + "mA " + 
-                std::to_string(capacity) + "mAh " + 
-                std::to_string(remaining) + "%");
         
         // Сохраняем данные батареи
         _batteryVoltage = voltage / 100.0; // Конвертируем мВ в В

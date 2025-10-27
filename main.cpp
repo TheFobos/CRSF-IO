@@ -80,10 +80,10 @@ int main() {
       bool axis2_ok = js_get_axis(2, ax2);
       bool axis3_ok = js_get_axis(3, ax3);
       
-      if (axis0_ok) crsfSetChannel(1, axisToUs(ax0)); // Roll
-      if (axis1_ok) crsfSetChannel(2, axisToUs(ax1)); // Pitch
-      if (axis2_ok) crsfSetChannel(3, axisToUs(ax2)); // Throttle
-      if (axis3_ok) crsfSetChannel(4, axisToUs(ax3)); // Yaw
+      if (axis0_ok) crsfSetChannel(1, axisToUs(ax2)); // Roll
+      if (axis1_ok) crsfSetChannel(2, axisToUs(-ax3)); // Pitch
+      if (axis2_ok) crsfSetChannel(3, axisToUs(-ax1)); // Throttle
+      if (axis3_ok) crsfSetChannel(4, axisToUs(ax0)); // Yaw
     }
 
     // Отправляем RC-каналы с частотой ~100 Гц для реалтайма
